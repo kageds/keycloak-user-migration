@@ -5,6 +5,7 @@ import com.danielfrak.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.danielfrak.code.keycloak.providers.rest.exceptions.RestUserProviderException;
 import com.danielfrak.code.keycloak.providers.rest.rest.http.HttpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.HttpStatus;
 import org.keycloak.common.util.Encode;
 import org.keycloak.component.ComponentModel;
@@ -13,6 +14,8 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.Optional;
 
+import org.jboss.logging.Logger;
+
 import static com.danielfrak.code.keycloak.providers.rest.ConfigurationProperties.*;
 
 public class RestUserService implements LegacyUserService {
@@ -20,6 +23,8 @@ public class RestUserService implements LegacyUserService {
     private final String uri;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private static final Logger LOG = Logger.getLogger(LegacyUserService.class);
+
 
     public RestUserService(ComponentModel model, HttpClient httpClient, ObjectMapper objectMapper) {
         this.httpClient = httpClient;
@@ -74,11 +79,16 @@ public class RestUserService implements LegacyUserService {
         }
         var getUsernameUri = String.format("%s/%s", this.uri, usernameOrEmail);
         try {
+            LOG.infof("Trying to map data to LegacyUser");
             var response = this.httpClient.get(getUsernameUri);
             if (response.getCode() != HttpStatus.SC_OK) {
                 return Optional.empty();
             }
-            var legacyUser = objectMapper.readValue(response.getBody(), LegacyUser.class);
+         
+            JsonNode root = objectMapper.readTree(response.getBody());
+//            String data = root.get("data").asText();
+            LOG.infof("Trying to map response %s to LegacyUser", response.getBody());
+            var legacyUser = objectMapper.treeToValue(root.get("data"), LegacyUser.class);
             return Optional.ofNullable(legacyUser);
         } catch (RuntimeException|IOException e) {
             throw new RestUserProviderException(e);
@@ -94,7 +104,7 @@ public class RestUserService implements LegacyUserService {
         var dto = new UserPasswordDto(password);
         try {
             var json = objectMapper.writeValueAsString(dto);
-            var response = httpClient.post(passwordValidationUri, json);
+            var response = httpClient.post(passwordValidationUri, "{ \"data\": " + json + "}");
             return response.getCode() == HttpStatus.SC_OK;
         } catch (IOException e) {
             throw new RestUserProviderException(e);
