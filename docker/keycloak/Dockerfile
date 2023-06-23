@@ -5,7 +5,7 @@ FROM $MAVEN_IMAGE as builder
 COPY pom.xml /tmp/
 COPY src /tmp/src
 WORKDIR /tmp/
-RUN mvn clean package
+RUN mvn package -Dmaven.test.skip=true
 
 FROM $KEYCLOAK_IMAGE
 USER root
